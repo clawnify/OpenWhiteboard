@@ -1,0 +1,15 @@
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+overrides:
+  react: npm:@preact/compat@^10.25.0
+  react-dom: npm:@preact/compat@^10.25.0
+minimumReleaseAgeExclude:
+  # First-party Clawnify packages — exempt from the new-release age gate so app
+  # builds pick up fresh versions promptly.
+  - '@clawnify/routes'
+  - '@clawnify/app'
+allowBuilds:
+  esbuild: true
+  sharp: false
+  workerd: true
