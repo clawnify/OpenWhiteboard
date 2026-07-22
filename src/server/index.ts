@@ -1,14 +1,9 @@
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { initDB, query, get, run } from "./db.js";
+import { createApp, createRoute, z } from "@clawnify/app";
+import { query, get, run } from "./db.js";
 
 type Env = { Bindings: { DB: D1Database } };
 
-const app = new OpenAPIHono<Env>();
-
-app.use("*", async (c, next) => {
-  initDB(c.env);
-  await next();
-});
+const app = createApp<Env>({ title: "Whiteboard API", version: "1.0.0" });
 
 // ── Schemas ──────────────────────────────────────────────────────────
 
@@ -154,9 +149,5 @@ app.openapi(deleteDrawing, async (c) => {
   await run("DELETE FROM drawings WHERE id = ?", [id]);
   return c.json({ ok: true }, 200);
 });
-
-// ── OpenAPI spec ────────────────────────────────────────────────────
-
-app.doc("/openapi.json", { openapi: "3.0.0", info: { title: "Whiteboard API", version: "1.0.0" } });
 
 export default app;
