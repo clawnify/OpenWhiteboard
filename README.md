@@ -1,5 +1,7 @@
 # Open Whiteboard
 
+[![Deploy with Clawnify](https://app.clawnify.com/deploy-button.svg)](https://app.clawnify.com/deploy?repo=clawnify/open-whiteboard)
+
 A collaborative whiteboard with hand-drawn style for sketching diagrams, wireframes, flowcharts, and visual brainstorming. Built with **Excalidraw + Preact + Tailwind CSS + Hono + SQLite**. Deploys to Cloudflare Workers via [Clawnify](https://clawnify.com).
 
 ## Features
