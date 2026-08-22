@@ -1,4 +1,4 @@
-# Whiteboard App Template
+# OpenWhiteboard Template
 
 A collaborative whiteboard application built with Excalidraw, Preact, and Hono. Provides a hand-drawn style canvas for sketching diagrams, wireframes, flowcharts, and visual brainstorming.
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://app.clawnify.com/schema/v1/clawnify.json",
   "version": 1,
-  "name": "Whiteboard App",
+  "name": "OpenWhiteboard",
   "description": "Collaborative whiteboard with hand-drawn feel for sketching diagrams, wireframes, flowcharts, and visual brainstorming. Canvas-based drawing with shapes, text, arrows, freehand, and export. Like Excalidraw. Best for whiteboarding tools, diagram editors, wireframe builders, or any sketch-based visual collaboration.",
   "icon": "icon.svg",
   "tags": ["whiteboard", "drawing", "diagrams", "sketching"],
