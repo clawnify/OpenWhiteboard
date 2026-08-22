@@ -1,6 +1,6 @@
 # OpenWhiteboard
 
-[![Deploy with Clawnify](https://app.clawnify.com/deploy-button.svg)](https://app.clawnify.com/deploy?repo=clawnify/open-whiteboard)
+[![Deploy with Clawnify](https://app.clawnify.com/deploy-button.svg)](https://app.clawnify.com/deploy?repo=clawnify/OpenWhiteboard)
 
 A collaborative whiteboard with hand-drawn style for sketching diagrams, wireframes, flowcharts, and visual brainstorming. Built with **Excalidraw + Preact + Tailwind CSS + Hono + SQLite**. Deploys to Cloudflare Workers via [Clawnify](https://clawnify.com).
 
@@ -21,7 +21,7 @@ A collaborative whiteboard with hand-drawn style for sketching diagrams, wirefra
 ## Quickstart
 
 ```bash
-git clone https://github.com/clawnify/open-whiteboard.git
+git clone https://github.com/clawnify/OpenWhiteboard.git
 cd open-whiteboard
 pnpm install
 ```
