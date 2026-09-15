@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler d1 execute open-whiteboard-db --local --file=src/server/schema.sql && concurrently -n ui,api -c cyan,green \"vite\" \"wrangler dev --port 8787\"",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@clawnify/app": "^0.2.1",

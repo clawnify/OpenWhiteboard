@@ -80,9 +80,9 @@ app.openapi(createDrawing, async (c) => {
   const name = body.name || "Untitled";
   const scene_data = body.scene_data || '{"elements":[],"appState":{},"files":{}}';
 
-  await run("INSERT INTO drawings (name, scene_data) VALUES (?, ?)", [name, scene_data]);
   const row = await get<z.infer<typeof DrawingSchema>>(
-    "SELECT * FROM drawings ORDER BY created_at DESC LIMIT 1"
+    "INSERT INTO drawings (name, scene_data) VALUES (?, ?) RETURNING *",
+    [name, scene_data]
   );
   return c.json(row!, 201);
 });
