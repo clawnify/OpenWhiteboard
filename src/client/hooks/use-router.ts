@@ -1,3 +1,4 @@
+import { reportLocation } from "@clawnify/app/client";
 import { useState, useEffect, useCallback } from "preact/hooks";
 
 export function useRouter() {
@@ -13,6 +14,8 @@ export function useRouter() {
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
+
+  useEffect(() => { reportLocation(path); }, [path]);
 
   const match = path.match(/^\/drawing\/([^/]+)$/);
   const drawingId = match ? match[1] : null;
