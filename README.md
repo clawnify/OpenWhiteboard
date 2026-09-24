@@ -16,6 +16,8 @@ A collaborative whiteboard with hand-drawn style for sketching diagrams, wirefra
 - **Grid mode** — snap-to-grid for precise layouts
 - **Keyboard shortcuts** — full Excalidraw shortcut set (Ctrl+Z undo, Ctrl+D duplicate, etc.)
 - **URL-based routing** — deep-linkable `/drawing/:id` URLs with browser back/forward support
+- **Present mode** — view-only exploring: drag to pan, scroll to zoom, nothing can be moved; `/drawing/:id?view` opens a board straight into it
+- **Default view** — every board opens centred with room around it (80% of the screen, zoom between 80% and 100%)
 - **Shape library** — access Excalidraw's community shape libraries
 
 ## Quickstart

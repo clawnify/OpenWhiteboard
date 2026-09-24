@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
-import { ArrowLeft, Check, Pencil } from "lucide-preact";
+import { ArrowLeft, Check, Pencil, PencilLine, Presentation } from "lucide-preact";
 import type { Drawing, SceneData } from "../types";
 
 interface EditorProps {
@@ -16,10 +16,51 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   const [nameValue, setNameValue] = useState(drawing.name);
   const initialDataLoaded = useRef(false);
   const drawingIdRef = useRef(drawing.id);
+  // Present mode: Excalidraw's view mode, where dragging pans and nothing can be edited. `?view` opens a link in it.
+  const [presenting, setPresenting] = useState(() => new URLSearchParams(window.location.search).has("view"));
+  const presentingRef = useRef(presenting);
+  presentingRef.current = presenting;
+
+  // Default view: centre the board so it fills 80% of the screen, never zoomed below 80% (a bigger board
+  // is panned instead) or above 100%. From there people zoom however they like.
+  const getBounds = useRef<((elements: readonly any[]) => [number, number, number, number]) | null>(null);
+  const frameBoard = (api: any) => {
+    const elements = api?.getSceneElements();
+    if (!elements?.length || !getBounds.current) return;
+    const [x1, y1, x2, y2] = getBounds.current(elements);
+    const { width, height } = api.getAppState();
+    const fit = Math.min(width / Math.max(x2 - x1, 1), height / Math.max(y2 - y1, 1)) * 0.8;
+    const zoom = Math.min(1, Math.max(0.8, fit));
+    api.updateScene({
+      appState: {
+        zoom: { value: zoom },
+        scrollX: width / (2 * zoom) - (x1 + x2) / 2,
+        scrollY: height / (2 * zoom) - (y1 + y2) / 2,
+      },
+    });
+  };
+
+  const togglePresenting = () => {
+    const next = !presenting;
+    setPresenting(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set("view", "");
+    else params.delete("view");
+    const query = params.toString().replace(/(^|&)view=(?=&|$)/, "$1view");
+    window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
+    if (next) frameBoard(excalidrawAPI);
+  };
+
+  // Every board opens on the default view, including a shared `?view` link.
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+    setTimeout(() => frameBoard(excalidrawAPI), 50);
+  }, [excalidrawAPI]);
 
   // Dynamically import Excalidraw (it's a large bundle)
   useEffect(() => {
     import("@excalidraw/excalidraw").then((mod) => {
+      getBounds.current = mod.getCommonBounds as any;
       setExcalidrawComp(() => mod.Excalidraw);
     });
   }, []);
@@ -52,6 +93,7 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
         initialDataLoaded.current = true;
         return;
       }
+      if (presentingRef.current) return;   // panning around a presented board isn't an edit
 
       const sceneData: SceneData = {
         elements,
@@ -151,6 +193,15 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
             <Pencil size={12} class="text-gray-300 group-hover:text-blue-400" />
           </button>
         )}
+
+        <button
+          onClick={togglePresenting}
+          class="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          title={presenting ? "Back to editing" : "Present: drag to explore, nothing can be moved"}
+        >
+          {presenting ? <PencilLine size={16} /> : <Presentation size={16} />}
+          {presenting ? "Edit" : "Present"}
+        </button>
       </div>
 
       {/* Excalidraw Canvas */}
@@ -161,6 +212,8 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
               excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
               initialData={getInitialData()}
               onChange={handleChange}
+              viewModeEnabled={presenting}
+              zenModeEnabled={presenting}
               theme="light"
               UIOptions={{
                 canvasActions: {

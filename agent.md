@@ -18,6 +18,7 @@ A collaborative whiteboard application built with Excalidraw, Preact, and Hono. 
 - Hand-drawn sketch aesthetic
 - Dark mode toggle
 - Export to PNG/SVG (built into Excalidraw)
+- Present mode: view-only, drag to pan; share `/drawing/:id?view` to open a board straight into it
 
 ## Data Model
 
