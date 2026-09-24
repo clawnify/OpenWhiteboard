@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
-import { ArrowLeft, Check, Pencil } from "lucide-preact";
+import { ArrowLeft, Check, Pencil, PencilLine, Presentation } from "lucide-preact";
 import type { Drawing, SceneData } from "../types";
 
 interface EditorProps {
@@ -16,6 +16,28 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   const [nameValue, setNameValue] = useState(drawing.name);
   const initialDataLoaded = useRef(false);
   const drawingIdRef = useRef(drawing.id);
+  // Present mode: Excalidraw's view mode, where dragging pans and nothing can be edited. `?view` opens a link in it.
+  const [presenting, setPresenting] = useState(() => new URLSearchParams(window.location.search).has("view"));
+  const presentingRef = useRef(presenting);
+  presentingRef.current = presenting;
+
+  const fitBoard = (api: any) => api?.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true });
+
+  const togglePresenting = () => {
+    const next = !presenting;
+    setPresenting(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set("view", "");
+    else params.delete("view");
+    const query = params.toString().replace(/(^|&)view=(?=&|$)/, "$1view");
+    window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
+    if (next) fitBoard(excalidrawAPI);
+  };
+
+  // A shared `?view` link opens on the whole board.
+  useEffect(() => {
+    if (excalidrawAPI && presentingRef.current) setTimeout(() => fitBoard(excalidrawAPI), 50);
+  }, [excalidrawAPI]);
 
   // Dynamically import Excalidraw (it's a large bundle)
   useEffect(() => {
@@ -52,6 +74,7 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
         initialDataLoaded.current = true;
         return;
       }
+      if (presentingRef.current) return;   // panning around a presented board isn't an edit
 
       const sceneData: SceneData = {
         elements,
@@ -151,6 +174,15 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
             <Pencil size={12} class="text-gray-300 group-hover:text-blue-400" />
           </button>
         )}
+
+        <button
+          onClick={togglePresenting}
+          class="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          title={presenting ? "Back to editing" : "Present: drag to explore, nothing can be moved"}
+        >
+          {presenting ? <PencilLine size={16} /> : <Presentation size={16} />}
+          {presenting ? "Edit" : "Present"}
+        </button>
       </div>
 
       {/* Excalidraw Canvas */}
@@ -161,6 +193,8 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
               excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
               initialData={getInitialData()}
               onChange={handleChange}
+              viewModeEnabled={presenting}
+              zenModeEnabled={presenting}
               theme="light"
               UIOptions={{
                 canvasActions: {
