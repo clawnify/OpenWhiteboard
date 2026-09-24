@@ -21,7 +21,24 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   const presentingRef = useRef(presenting);
   presentingRef.current = presenting;
 
-  const fitBoard = (api: any) => api?.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true });
+  // Default view: centre the board so it fills 80% of the screen, never zoomed below 80% (a bigger board
+  // is panned instead) or above 100%. From there people zoom however they like.
+  const getBounds = useRef<((elements: readonly any[]) => [number, number, number, number]) | null>(null);
+  const frameBoard = (api: any) => {
+    const elements = api?.getSceneElements();
+    if (!elements?.length || !getBounds.current) return;
+    const [x1, y1, x2, y2] = getBounds.current(elements);
+    const { width, height } = api.getAppState();
+    const fit = Math.min(width / Math.max(x2 - x1, 1), height / Math.max(y2 - y1, 1)) * 0.8;
+    const zoom = Math.min(1, Math.max(0.8, fit));
+    api.updateScene({
+      appState: {
+        zoom: { value: zoom },
+        scrollX: width / (2 * zoom) - (x1 + x2) / 2,
+        scrollY: height / (2 * zoom) - (y1 + y2) / 2,
+      },
+    });
+  };
 
   const togglePresenting = () => {
     const next = !presenting;
@@ -31,17 +48,19 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
     else params.delete("view");
     const query = params.toString().replace(/(^|&)view=(?=&|$)/, "$1view");
     window.history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
-    if (next) fitBoard(excalidrawAPI);
+    if (next) frameBoard(excalidrawAPI);
   };
 
-  // A shared `?view` link opens on the whole board.
+  // Every board opens on the default view, including a shared `?view` link.
   useEffect(() => {
-    if (excalidrawAPI && presentingRef.current) setTimeout(() => fitBoard(excalidrawAPI), 50);
+    if (!excalidrawAPI) return;
+    setTimeout(() => frameBoard(excalidrawAPI), 50);
   }, [excalidrawAPI]);
 
   // Dynamically import Excalidraw (it's a large bundle)
   useEffect(() => {
     import("@excalidraw/excalidraw").then((mod) => {
+      getBounds.current = mod.getCommonBounds as any;
       setExcalidrawComp(() => mod.Excalidraw);
     });
   }, []);
