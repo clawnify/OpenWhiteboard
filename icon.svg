@@ -1,15 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
-  <rect width="180" height="180" rx="40" fill="#2563eb"/>
-  <g stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <!-- Pencil -->
-    <path d="M55 125 L105 75 L115 85 L65 135 L50 140 Z"/>
-    <path d="M105 75 L115 65 L125 75 L115 85"/>
-    <!-- Rectangle sketch -->
-    <rect x="80" y="45" width="55" height="40" rx="3" stroke-dasharray="6 4"/>
-    <!-- Circle sketch -->
-    <circle cx="70" cy="95" r="15" stroke-dasharray="6 4"/>
-    <!-- Arrow -->
-    <path d="M110 100 L140 100" />
-    <path d="M135 95 L140 100 L135 105" />
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect width="56" height="56" rx="12" fill="#2563eb"/><g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="13" y="13" width="30" height="22" rx="2"/><path d="M28 35v4M21 43l7-4 7 4"/><path d="M19 26c2-3 4-3 6 0s4 3 6 0 4-3 6 0"/></g></svg>
