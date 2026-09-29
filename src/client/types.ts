@@ -4,6 +4,7 @@ export interface Drawing {
   scene_data: string;
   created_at: string;
   updated_at: string;
+  revision: number;
 }
 
 export interface SceneData {

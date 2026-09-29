@@ -13,6 +13,7 @@ const DrawingSchema = z.object({
   scene_data: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+  revision: z.number(),
 });
 
 const ErrorSchema = z.object({ error: z.string() });
@@ -100,6 +101,9 @@ const updateDrawing = createRoute({
           schema: z.object({
             name: z.string().optional(),
             scene_data: z.string().optional(),
+            // The revision the new scene_data was made from. When it is no longer current the save is
+            // refused with 409, so a stale copy never replaces a newer one. Omit it to overwrite regardless.
+            revision: z.number().int().optional(),
           }),
         },
       },
@@ -108,6 +112,7 @@ const updateDrawing = createRoute({
   responses: {
     200: { content: { "application/json": { schema: DrawingSchema } }, description: "OK" },
     404: { content: { "application/json": { schema: ErrorSchema } }, description: "Not found" },
+    409: { content: { "application/json": { schema: DrawingSchema } }, description: "Changed since that revision; the current drawing" },
   },
 });
 
@@ -115,19 +120,21 @@ app.openapi(updateDrawing, async (c) => {
   const { id } = c.req.valid("param");
   const body = c.req.valid("json");
 
-  const existing = await get<z.infer<typeof DrawingSchema>>("SELECT * FROM drawings WHERE id = ?", [id]);
-  if (!existing) return c.json({ error: "Not found" }, 404);
+  const scene = body.scene_data ?? null;
+  const guarded = scene !== null && body.revision !== undefined;
 
-  const name = body.name ?? existing.name;
-  const scene_data = body.scene_data ?? existing.scene_data;
-
-  await run(
-    "UPDATE drawings SET name = ?, scene_data = ?, updated_at = datetime('now') WHERE id = ?",
-    [name, scene_data, id]
+  // One statement, so nothing can land between the revision check and the write.
+  const row = await get<z.infer<typeof DrawingSchema>>(
+    `UPDATE drawings SET name = COALESCE(?, name), scene_data = COALESCE(?, scene_data),
+       revision = revision + (? IS NOT NULL), updated_at = datetime('now')
+     WHERE id = ?${guarded ? " AND revision = ?" : ""} RETURNING *`,
+    guarded ? [body.name ?? null, scene, scene, id, body.revision!] : [body.name ?? null, scene, scene, id]
   );
+  if (row) return c.json(row, 200);
 
-  const row = await get<z.infer<typeof DrawingSchema>>("SELECT * FROM drawings WHERE id = ?", [id]);
-  return c.json(row!, 200);
+  const current = await get<z.infer<typeof DrawingSchema>>("SELECT * FROM drawings WHERE id = ?", [id]);
+  if (!current) return c.json({ error: "Not found" }, 404);
+  return c.json(current, 409);
 });
 
 // ── Delete drawing ──────────────────────────────────────────────────
