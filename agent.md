@@ -28,6 +28,7 @@ A collaborative whiteboard application built with Excalidraw, Preact, and Hono. 
 - `scene_data` TEXT — JSON containing Excalidraw elements, appState, and files
 - `created_at` TEXT
 - `updated_at` TEXT
+- `revision` INTEGER — goes up by one on every write to `scene_data`
 
 ## API Endpoints
 
@@ -38,6 +39,14 @@ A collaborative whiteboard application built with Excalidraw, Preact, and Hono. 
 | POST | /api/drawings | Create new drawing |
 | PUT | /api/drawings/:id | Update drawing (name and/or scene data) |
 | DELETE | /api/drawings/:id | Delete drawing |
+
+Several tabs, people and agents can edit the same board. Each drawing carries a `revision`, which goes up by one on
+every write to `scene_data`. Send the `revision` you read with the new `scene_data`: if the board has changed since,
+nothing is written and you get `409` with the current drawing. Re-read it, apply your change to that, and save again.
+A write without `revision` overwrites whatever is there, so use it only when that is what you mean.
+
+An open tab whose save gets a `409` merges instead of overwriting: it keeps each element from whichever side changed
+it, so an element added, moved or left out through the API survives a tab that was showing an older copy.
 
 ## Customization Points
 

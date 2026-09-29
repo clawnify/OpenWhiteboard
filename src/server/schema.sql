@@ -3,5 +3,6 @@ CREATE TABLE IF NOT EXISTS drawings (
   name TEXT DEFAULT 'Untitled',
   scene_data TEXT DEFAULT '{"elements":[],"appState":{},"files":{}}',
   created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+  updated_at TEXT DEFAULT (datetime('now')),
+  revision INTEGER NOT NULL DEFAULT 0
 );

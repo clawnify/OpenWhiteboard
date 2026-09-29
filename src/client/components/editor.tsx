@@ -1,12 +1,31 @@
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
 import { ArrowLeft, Check, Pencil, PencilLine, Presentation } from "lucide-preact";
 import type { Drawing, SceneData } from "../types";
+import { mergeElements, syncedScene, type Element, type Synced } from "../merge";
 
 interface EditorProps {
   drawing: Drawing;
-  saveDrawing: (id: string, sceneData: string) => void;
+  saveDrawing: (id: string, sceneData: string, revision: number) => Promise<{ saved: boolean; drawing: Drawing }>;
   renameDrawing: (id: string, name: string) => Promise<void>;
   navigate: (to: string) => void;
+}
+
+const SAVED_SETTINGS = [
+  "viewBackgroundColor", "currentItemFontFamily", "currentItemFontSize", "currentItemStrokeColor",
+  "currentItemBackgroundColor", "currentItemFillStyle", "currentItemStrokeWidth", "currentItemRoughness",
+  "currentItemOpacity", "gridSize", "gridModeEnabled", "theme",
+] as const;
+
+function toScene(elements: readonly any[], appState: any, files: any): SceneData {
+  return {
+    elements,
+    appState: Object.fromEntries(SAVED_SETTINGS.map((k) => [k, appState[k]])),
+    files: files || {},
+  };
+}
+
+function parseScene(sceneData: string): Partial<SceneData> {
+  try { return JSON.parse(sceneData); } catch { return {}; }
 }
 
 export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: EditorProps) {
@@ -19,7 +38,19 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   // saving those would write this tab's copy over anyone else's edits for no change at all.
   const savedKey = useRef<string | null>(null);
   const hashVersion = useRef<((elements: readonly any[]) => number) | null>(null);
+  const restoreElements = useRef<((elements: any[], local: readonly any[], opts?: any) => any[]) | null>(null);
   const drawingIdRef = useRef(drawing.id);
+  const drawingRef = useRef(drawing);
+  drawingRef.current = drawing;
+  // A save names the revision it was made from, and the server refuses it if the board has moved on.
+  // `synced` is the scene at that revision, which a refused save is merged against.
+  const revision = useRef(drawing.revision);
+  const synced = useRef<Synced | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saving = useRef(false);
+  const saveAgain = useRef(false);
+  const apiRef = useRef<any>(null);
+  apiRef.current = excalidrawAPI;
   // Present mode: Excalidraw's view mode, where dragging pans and nothing can be edited. `?view` opens a link in it.
   const [presenting, setPresenting] = useState(() => new URLSearchParams(window.location.search).has("view"));
   const presentingRef = useRef(presenting);
@@ -66,6 +97,7 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
     import("@excalidraw/excalidraw").then((mod) => {
       getBounds.current = mod.getCommonBounds as any;
       hashVersion.current = mod.hashElementsVersion as any;
+      restoreElements.current = mod.restoreElements as any;
       setExcalidrawComp(() => mod.Excalidraw);
     });
   }, []);
@@ -76,6 +108,9 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
       drawingIdRef.current = drawing.id;
       initialDataLoaded.current = false;
       savedKey.current = null;
+      revision.current = drawing.revision;
+      synced.current = null;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
       setNameValue(drawing.name);
 
       if (excalidrawAPI) {
@@ -93,44 +128,85 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
     }
   }, [drawing.id, excalidrawAPI]);
 
+  const sceneKey = (scene: SceneData) =>
+    [
+      hashVersion.current ? hashVersion.current(scene.elements) : JSON.stringify(scene.elements),
+      JSON.stringify(scene.appState),
+      Object.keys(scene.files).sort().join(),
+    ].join("|");
+
+  // The save was refused: someone else changed the board. Take in their changes, keeping this tab's own
+  // where they don't collide, and make the server's scene the new starting point.
+  const mergeCurrent = (api: any, current: Drawing) => {
+    const remote = parseScene(current.scene_data);
+    const remoteElements = (remote.elements ?? []) as Element[];
+    const local = api.getSceneElementsIncludingDeleted();
+    const base = synced.current ?? syncedScene([], []);
+    const s = api.getAppState();
+    const editing = new Set<string>([s.editingTextElement?.id, s.resizingElement?.id, s.newElement?.id].filter(Boolean));
+    const { elements, fromRemote } = mergeElements(base, local, remoteElements, editing);
+    const merged = restoreElements.current!(elements, local, { repairBindings: true });
+    api.updateScene({ elements: merged, captureUpdate: "NEVER" });   // their changes aren't this person's to undo
+    const have = api.getFiles();
+    const missing = Object.values(remote.files ?? {}).filter((f: any) => !have[f.id]);
+    if (missing.length) api.addFiles(missing);
+    synced.current = {
+      raw: syncedScene(remoteElements, []).raw,
+      versions: new Map(merged.map((e: Element) => [e.id, fromRemote.has(e.id) ? e.version : base.versions.get(e.id)])),
+    };
+  };
+
+  // One save at a time. Edits made while a save is out go in the next one, which starts from its revision.
+  const flush = useCallback(async () => {
+    if (saving.current) { saveAgain.current = true; return; }
+    saving.current = true;
+    const id = drawing.id;
+    try {
+      do {
+        saveAgain.current = false;
+        const api = apiRef.current;
+        if (!api || drawingIdRef.current !== id) return;
+        const scene = toScene(api.getSceneElementsIncludingDeleted(), api.getAppState(), api.getFiles());
+        const key = sceneKey(scene);
+        if (key === savedKey.current) continue;
+        const sent = JSON.stringify(scene);
+        const result = await saveDrawing(id, sent, revision.current);
+        if (drawingIdRef.current !== id) return;
+        revision.current = result.drawing.revision;
+        if (result.saved) {
+          savedKey.current = key;
+          const elements = (JSON.parse(sent) as SceneData).elements as Element[];
+          synced.current = syncedScene(elements, elements);
+        } else {
+          mergeCurrent(api, result.drawing);
+          saveAgain.current = true;
+        }
+      } while (saveAgain.current);
+    } catch {
+      // The failure is shown by useDrawings; the next edit tries again.
+    } finally {
+      saving.current = false;
+    }
+  }, [drawing.id, saveDrawing]);
+
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
   const handleChange = useCallback(
     (elements: readonly any[], appState: any, files: any) => {
       if (presentingRef.current) return;   // panning around a presented board isn't an edit
 
-      const sceneData: SceneData = {
-        elements,
-        appState: {
-          viewBackgroundColor: appState.viewBackgroundColor,
-          currentItemFontFamily: appState.currentItemFontFamily,
-          currentItemFontSize: appState.currentItemFontSize,
-          currentItemStrokeColor: appState.currentItemStrokeColor,
-          currentItemBackgroundColor: appState.currentItemBackgroundColor,
-          currentItemFillStyle: appState.currentItemFillStyle,
-          currentItemStrokeWidth: appState.currentItemStrokeWidth,
-          currentItemRoughness: appState.currentItemRoughness,
-          currentItemOpacity: appState.currentItemOpacity,
-          gridSize: appState.gridSize,
-          gridModeEnabled: appState.gridModeEnabled,
-          theme: appState.theme,
-        },
-        files: files || {},
-      };
-
-      const key = [
-        hashVersion.current ? hashVersion.current(elements) : JSON.stringify(elements),
-        JSON.stringify(sceneData.appState),
-        Object.keys(sceneData.files).sort().join(),
-      ].join("|");
+      const key = sceneKey(toScene(elements, appState, files));
       if (!initialDataLoaded.current) {
         initialDataLoaded.current = true;
         savedKey.current = key;
+        synced.current = syncedScene((parseScene(drawingRef.current.scene_data).elements ?? []) as Element[], elements);
         return;
       }
       if (key === savedKey.current) return;
-      savedKey.current = key;
-      saveDrawing(drawing.id, JSON.stringify(sceneData));
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(flush, 2000);
     },
-    [drawing.id, saveDrawing]
+    [flush]
   );
 
   const getInitialData = useCallback(() => {

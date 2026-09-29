@@ -1,14 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "preact/hooks";
+import { useState, useEffect, useCallback } from "preact/hooks";
 import { api } from "../api";
-import type { Drawing, SceneData } from "../types";
+import type { Drawing } from "../types";
 
 export function useDrawings() {
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [activeDrawing, setActiveDrawing] = useState<Drawing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingScene = useRef<string | null>(null);
 
   useEffect(() => {
     api<Drawing[]>("GET", "/api/drawings")
@@ -35,22 +33,28 @@ export function useDrawings() {
     return d;
   }, []);
 
+  // Saves a scene made from `revision`. When the board has changed since, nothing is written and the
+  // current drawing comes back with `saved: false`, for the caller to merge and save again.
   const saveDrawing = useCallback(
-    (id: string, sceneData: string) => {
-      pendingScene.current = sceneData;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(async () => {
-        const data = pendingScene.current;
-        if (!data) return;
-        pendingScene.current = null;
-        try {
-          const updated = await api<Drawing>("PUT", `/api/drawings/${id}`, { scene_data: data });
-          setActiveDrawing(updated);
-          setDrawings((prev) => prev.map((d) => (d.id === id ? updated : d)));
-        } catch (e: any) {
-          setError(e.message);
-        }
-      }, 2000);
+    async (id: string, sceneData: string, revision: number): Promise<{ saved: boolean; drawing: Drawing }> => {
+      let updated: Drawing;
+      try {
+        const r = await fetch(`/api/drawings/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scene_data: sceneData, revision }),
+        });
+        const data = await r.json();
+        if (r.status === 409) return { saved: false, drawing: data as Drawing };
+        if (!r.ok) throw new Error((data as { error?: string }).error || "Request failed");
+        updated = data as Drawing;
+      } catch (e: any) {
+        setError(e.message);
+        throw e;
+      }
+      setActiveDrawing((prev) => (prev?.id === id ? updated : prev));
+      setDrawings((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      return { saved: true, drawing: updated };
     },
     []
   );
@@ -66,13 +70,6 @@ export function useDrawings() {
     setDrawings((prev) => prev.filter((d) => d.id !== id));
     if (activeDrawing?.id === id) setActiveDrawing(null);
   }, [activeDrawing]);
-
-  // Flush save on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, []);
 
   return {
     drawings,
