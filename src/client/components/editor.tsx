@@ -15,6 +15,10 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   const [renaming, setRenaming] = useState(false);
   const [nameValue, setNameValue] = useState(drawing.name);
   const initialDataLoaded = useRef(false);
+  // What was last loaded or saved. Excalidraw calls onChange for panning, zooming and selecting too;
+  // saving those would write this tab's copy over anyone else's edits for no change at all.
+  const savedKey = useRef<string | null>(null);
+  const hashVersion = useRef<((elements: readonly any[]) => number) | null>(null);
   const drawingIdRef = useRef(drawing.id);
   // Present mode: Excalidraw's view mode, where dragging pans and nothing can be edited. `?view` opens a link in it.
   const [presenting, setPresenting] = useState(() => new URLSearchParams(window.location.search).has("view"));
@@ -61,6 +65,7 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
   useEffect(() => {
     import("@excalidraw/excalidraw").then((mod) => {
       getBounds.current = mod.getCommonBounds as any;
+      hashVersion.current = mod.hashElementsVersion as any;
       setExcalidrawComp(() => mod.Excalidraw);
     });
   }, []);
@@ -70,6 +75,7 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
     if (drawingIdRef.current !== drawing.id) {
       drawingIdRef.current = drawing.id;
       initialDataLoaded.current = false;
+      savedKey.current = null;
       setNameValue(drawing.name);
 
       if (excalidrawAPI) {
@@ -89,10 +95,6 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
 
   const handleChange = useCallback(
     (elements: readonly any[], appState: any, files: any) => {
-      if (!initialDataLoaded.current) {
-        initialDataLoaded.current = true;
-        return;
-      }
       if (presentingRef.current) return;   // panning around a presented board isn't an edit
 
       const sceneData: SceneData = {
@@ -114,6 +116,18 @@ export function Editor({ drawing, saveDrawing, renameDrawing, navigate }: Editor
         files: files || {},
       };
 
+      const key = [
+        hashVersion.current ? hashVersion.current(elements) : JSON.stringify(elements),
+        JSON.stringify(sceneData.appState),
+        Object.keys(sceneData.files).sort().join(),
+      ].join("|");
+      if (!initialDataLoaded.current) {
+        initialDataLoaded.current = true;
+        savedKey.current = key;
+        return;
+      }
+      if (key === savedKey.current) return;
+      savedKey.current = key;
       saveDrawing(drawing.id, JSON.stringify(sceneData));
     },
     [drawing.id, saveDrawing]
